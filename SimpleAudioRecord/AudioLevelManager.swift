@@ -31,7 +31,7 @@ class AudioLevelManager: AudioLevelManagerProtocl {
     enum AudioIndicator {
         static let minLevel: Float = 0.0
         static let maxLevel: Float = 0.3
-        static let gainfactor: Float = 4.0
+        static let gainfactor: Float = 3.0
     }
     
     @ObservationIgnored private var isSessionActivate = false
@@ -93,6 +93,7 @@ class AudioLevelManager: AudioLevelManagerProtocl {
                     let gainedAudioLevel = min(1, normalizedLevel * AudioIndicator.gainfactor)
                     self?.audioLevel = gainedAudioLevel
                 }
+                
                 self?.audioLevel = audioLevel
             }
             .store(in: &cancellables)
@@ -121,7 +122,7 @@ class AudioLevelManager: AudioLevelManagerProtocl {
             let recordingFormat = inputNode.outputFormat(forBus: 0)
             let dummyOutputFormat = AVAudioFormat(
                 commonFormat: .pcmFormatInt16,
-                sampleRate: 16000,
+                sampleRate: 44100,
                 channels: 1,
                 interleaved: true
             )!
@@ -215,6 +216,7 @@ class AudioLevelManager: AudioLevelManagerProtocl {
         
         DispatchQueue.main.async {
             self.isRecording = false
+            self.audioLevel = 0
         }
     }
     
