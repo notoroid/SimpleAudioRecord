@@ -48,6 +48,14 @@ class AudioLevelManager: AudioLevelManagerProtocl {
     var internalInputPickerInteraction: AVInputPickerInteraction? /*= */
     let inputPickerDelegateAdaptor = InputPickerDelegateAdaptor()
     
+    // isBluetoothHighQualityRecordingの変化を監視
+    var isBluetoothHighQualityRecording = false {
+        didSet {
+            if oldValue != isBluetoothHighQualityRecording {
+                handleBluetoothQualityChange()
+            }
+        }
+    }
     
     @ObservationIgnored private let audioLevelSubject = CurrentValueSubject<Float, Never>(0.0)
     @ObservationIgnored var audioLvelPublisher: AnyPublisher<Float, Never> {
@@ -69,10 +77,62 @@ class AudioLevelManager: AudioLevelManagerProtocl {
         return internalInputPickerInteraction!
     }
     
+    // Bluetoothの高音質録音設定が変更された時の処理
+    private func handleBluetoothQualityChange() {
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            
+            let wasRecording = self.isRecording
+            
+            // 録音中の場合は一旦停止
+            if wasRecording {
+                self.stopRecordingInternal()
+            }
+            
+            // セッションを再設定
+            self.reconfigureAudioSession()
+            
+            // 録音中だった場合は再開
+            if wasRecording {
+                Thread.sleep(forTimeInterval: 0.3)
+                self.startRcordingInternal()
+            }
+        }
+    }
+    
+    // オーディオセッションの再設定
+    private func reconfigureAudioSession() {
+        do {
+            // セッションを無効化
+            if isSessionActivate {
+                try session.setActive(false, options: .notifyOthersOnDeactivation)
+                isSessionActivate = false
+            }
+            
+            // セッションを再度有効化（新しい設定で）
+            _ = getActivatedSession()
+            
+        } catch {
+            DispatchQueue.main.async {
+                self.recordingError = error
+            }
+            print("セッション再設定エラー: \(error)")
+        }
+    }
+    
     private func getActivatedSession() -> AVAudioSession {
         do {
             if !isSessionActivate {
-                try session.setCategory(AVAudioSession.Category.record)
+                // isBluetoothHighQualityRecordingの状態に応じてオプションを設定
+                var options: AVAudioSession.CategoryOptions = [.allowBluetoothHFP]
+                if isBluetoothHighQualityRecording {
+                    options.insert(.bluetoothHighQualityRecording)
+                }
+                
+                try session.setCategory(
+                    AVAudioSession.Category.record,
+                    options: options
+                )
                 try session.setActive(true)
                 isSessionActivate = true
             }

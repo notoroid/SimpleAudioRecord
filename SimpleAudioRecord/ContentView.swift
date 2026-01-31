@@ -10,7 +10,7 @@ import Combine
 import AVKit
 
 struct ContentView: View {
-    let audioLevelManager: AudioLevelManager
+    @State var audioLevelManager: AudioLevelManager
     let simpleAudioPlayer: SimpleAudioPlayer
     
     /// Audio levels for the 14 bars (0.0 - 1.0)
@@ -73,6 +73,15 @@ struct ContentView: View {
                 .standardAudioLevelVisualizerModifier(levels: audioLevels)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .padding(.vertical)
+
+            
+            GeometryReader { geometry in
+                Toggle("高音質Bluetooth録音", isOn: $audioLevelManager.isBluetoothHighQualityRecording)
+                    .frame(width: geometry.size.width * 0.6)
+                    .frame(maxWidth: .infinity)
+            }
+            .frame(height: 50)
+            .padding(.vertical)
             
             Text("audioLevel=\(audioLevelManager.audioLevel)")
                 .padding(.vertical)
