@@ -31,7 +31,7 @@ class AudioLevelManager: AudioLevelManagerProtocl {
     enum AudioIndicator {
         static let minLevel: Float = 0.0
         static let maxLevel: Float = 0.3
-        static let gainfactor: Float = 3.0
+        static let gainfactor: Float = 4.0
     }
     
     @ObservationIgnored private var isSessionActivate = false
@@ -94,20 +94,46 @@ class AudioLevelManager: AudioLevelManagerProtocl {
                     self?.audioLevel = gainedAudioLevel
                 }
                 
+//                print("audioLevel=\(audioLevel)")
+                
                 self?.audioLevel = audioLevel
             }
             .store(in: &cancellables)
+        
+        // デバイス変更の通知を監視
+        NotificationCenter.default.addObserver(
+            forName: AVAudioSession.routeChangeNotification,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let self = self else { return }
+            
+            // 録音中の場合は一旦停止して再開
+            if self.isRecording {
+                self.queue.async {
+                    self.stopRecordingInternal()
+                    // 少し待ってから再開
+                    Thread.sleep(forTimeInterval: 0.5)
+                    self.startRcordingInternal()
+                }
+            }
+        }
     }
     
     private func startRcordingInternal() {
         do {
-            _ = getActivatedSession()
-            
-            // Sweep audio engine
+            // オーディオエンジンを完全にリセット
             if audioEngine.isRunning {
-                audioEngine.inputNode.removeTap(onBus: 0)
+                inputNode?.removeTap(onBus: 0)
                 audioEngine.stop()
             }
+            
+            // 既存のオーディオエンジンを破棄して新しいインスタンスを作成
+            audioEngine = AVAudioEngine()
+            
+            // セッションを再アクティベート
+            isSessionActivate = false
+            _ = getActivatedSession()
             
             // WAVファイルのパスを取得
             let tempDir = FileManager.default.temporaryDirectory
@@ -120,7 +146,17 @@ class AudioLevelManager: AudioLevelManagerProtocl {
             
             inputNode = audioEngine.inputNode
             let recordingFormat = inputNode.outputFormat(forBus: 0)
-            let dummyOutputFormat = AVAudioFormat(
+            
+            // 入力フォーマットが有効かチェック
+            guard recordingFormat.sampleRate > 0 && recordingFormat.channelCount > 0 else {
+                throw NSError(
+                    domain: "AudioLevelManager",
+                    code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "Invalid input format"]
+                )
+            }
+            
+            let targetOutputFormat = AVAudioFormat(
                 commonFormat: .pcmFormatInt16,
                 sampleRate: 44100,
                 channels: 1,
@@ -130,28 +166,33 @@ class AudioLevelManager: AudioLevelManagerProtocl {
             // WAVファイルを作成
             audioFile = try AVAudioFile(
                 forWriting: audioFileURL,
-                settings: dummyOutputFormat.settings,
+                settings: targetOutputFormat.settings,
                 commonFormat: .pcmFormatInt16,
                 interleaved: true
             )
             
-            let converter = AVAudioConverter(from: recordingFormat, to: dummyOutputFormat)!
-            
-            inputNode.installTap(onBus: 0, bufferSize: 4096, format: recordingFormat) {[weak self] buffer, audioTime in
+            // nilを指定してネイティブフォーマットを使用
+            inputNode.installTap(onBus: 0, bufferSize: 4096, format: nil) {[weak self] buffer, audioTime in
+                let bufferFormat = buffer.format
+                
                 let inputFrameCount = buffer.frameLength
                 let outputFrameCount = AVAudioFrameCount(
-                    Double(inputFrameCount) * dummyOutputFormat.sampleRate / recordingFormat.sampleRate
+                    Double(inputFrameCount) * targetOutputFormat.sampleRate / bufferFormat.sampleRate
                 )
                 
                 guard let convertedBuffer = AVAudioPCMBuffer(
-                    pcmFormat: dummyOutputFormat,
+                    pcmFormat: targetOutputFormat,
                     frameCapacity: outputFrameCount
                 ) else {
                     return
                 }
                 
+                guard let localConverter = AVAudioConverter(from: bufferFormat, to: targetOutputFormat) else {
+                    return
+                }
+                
                 var error: NSError?
-                let outputStatus = converter.convert( to: convertedBuffer, error: &error) { _, status in
+                let outputStatus = localConverter.convert(to: convertedBuffer, error: &error) { _, status in
                     status.pointee = AVAudioConverterInputStatus.haveData
                     return buffer
                 }
@@ -173,6 +214,7 @@ class AudioLevelManager: AudioLevelManagerProtocl {
                     }
                 }
             }
+            
             audioEngine.prepare()
             try audioEngine.start()
 
@@ -181,7 +223,7 @@ class AudioLevelManager: AudioLevelManagerProtocl {
                 self.recordingError = nil
             }
         } catch {
-            print("録音開始エラー")
+            print("録音開始エラー: \(error)")
             DispatchQueue.main.async {
                 self.recordingError = error
                 self.isRecording = false
@@ -207,7 +249,7 @@ class AudioLevelManager: AudioLevelManagerProtocl {
     
     private func stopRecordingInternal() {
         if audioEngine.isRunning {
-            inputNode.removeTap(onBus: 0)
+            inputNode?.removeTap(onBus: 0)
             audioEngine.stop()
         }
         
@@ -216,7 +258,6 @@ class AudioLevelManager: AudioLevelManagerProtocl {
         
         DispatchQueue.main.async {
             self.isRecording = false
-            self.audioLevel = 0
         }
     }
     
@@ -230,5 +271,9 @@ class AudioLevelManager: AudioLevelManagerProtocl {
         queue.async { [weak self] in
             self?.stopRecordingInternal()
         }
+    }
+    
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 }
