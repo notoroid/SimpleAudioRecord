@@ -33,7 +33,7 @@ Built with SwiftUI and AVFoundation framework for iOS. Utilizes AVAudioEngine fo
 - Temporary file storage (files are deleted when app is terminated)
 
 ## Screenshot
-<img width="375" height="815" alt="SimpleAudioRecord" src="https://github.com/user-attachments/assets/0a05b782-2922-47c7-ad2a-7407d4382f5b" />
+<img width="375" height="815" alt="SimpleAudioRecord" src="https://github.com/user-attachments/assets/7697fe0b-4de7-41f7-be39-759e78c1d1ef" />
 
 ## Installation
 
