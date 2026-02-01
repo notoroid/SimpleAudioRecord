@@ -11,8 +11,8 @@ import SwiftUI
 enum AudioLevelVisualizerConstants {
     static let barCount = 14
     static let barWidthRatio: CGFloat = 0.4
-    static let backgroundColor = Color(red: 0.4, green: 0.4, blue: 0.4)
-    static let barColor = Color(red: 0.42, green: 0.5, blue: 0.84)
+    static let backgroundColor = Color(red: 0.8, green: 0.8, blue: 0.8)
+    static let barColor = Color(red: 0.42, green: 0.84, blue: 0.5)
 }
 
 // MARK: - SwiftUI Audio Level Visualizer View
